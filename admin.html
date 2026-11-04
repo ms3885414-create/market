@@ -1,0 +1,50 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>لوحة صاحب المحل</title>
+<meta name="robots" content="noindex"><link rel="stylesheet" href="style.css"></head><body>
+<header><h1>🔐 لوحة صاحب المحل</h1><button class="btn g hid" id="out">خروج</button></header>
+<main>
+<div id="login" class="card"><label>الإيميل</label><input id="em" type="email"><label>الباسورد</label><input id="pw" type="password">
+<button class="btn" id="go" style="width:100%;margin-top:12px">دخول</button><div id="err" style="color:var(--dan)"></div></div>
+<div id="app" class="hid">
+ <div class="card"><h3 id="ft" style="margin-top:0">إضافة صنف</h3>
+  <div class="row"><div><label>اسم الصنف</label><input id="fn"></div><div><label>إيموجي</label><input id="fe" maxlength="2"></div></div>
+  <div class="row"><div><label>السعر</label><input id="fp" type="number" step="0.5" min="0"></div><div><label>الكمية</label><input id="fs" type="number" min="0"></div><div><label>التصنيف</label><input id="fc"></div></div>
+  <div class="row" style="margin-top:12px"><button class="btn" id="save">حفظ</button><button class="btn g hid" id="cancel">إلغاء</button></div></div>
+ <h3>الأصناف</h3><div class="card tbl"><table><tbody id="pt"></tbody></table></div>
+ <h3>الطلبات <button class="btn g" id="ref" style="font-size:12px">تحديث</button></h3><div id="ords"></div>
+</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+const sb=supabase.createClient(CFG.URL,CFG.KEY),$=i=>document.getElementById(i);
+const E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money=n=>Number(n).toLocaleString('ar-EG')+' ج.م';let edit=null,prods=[],timer;
+async function gate(){
+  const {data:{session}}=await sb.auth.getSession();
+  $('login').classList.toggle('hid',!!session);$('app').classList.toggle('hid',!session);$('out').classList.toggle('hid',!session);
+  clearInterval(timer);if(session){loadAll();timer=setInterval(loadOrders,20000)}
+}
+$('go').onclick=async()=>{const {error}=await sb.auth.signInWithPassword({email:$('em').value,password:$('pw').value});$('err').textContent=error?'بيانات الدخول غلط':'';gate()};
+$('out').onclick=async()=>{await sb.auth.signOut();gate()};
+async function loadAll(){await loadProds();await loadOrders()}
+async function loadProds(){
+  const {data}=await sb.from('products').select('*').order('name');prods=data||[];
+  $('pt').innerHTML=prods.map(p=>`<tr><td>${E(p.emoji||'')} ${E(p.name)}<br><small>${E(p.category||'')}</small></td><td>${money(p.price)}</td><td>المخزون: ${p.stock}</td><td style="white-space:nowrap"><button class="btn g" data-e="${p.id}">تعديل</button> <button class="btn d" data-x="${p.id}">حذف</button></td></tr>`).join('')||'<tr><td>لا توجد أصناف</td></tr>';
+  $('pt').querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const p=prods.find(x=>x.id===b.dataset.e);edit=p.id;fn.value=p.name;fe.value=p.emoji||'';fp.value=p.price;fs.value=p.stock;fc.value=p.category||'';$('ft').textContent='تعديل صنف';$('cancel').classList.remove('hid');scrollTo(0,0)});
+  $('pt').querySelectorAll('[data-x]').forEach(b=>b.onclick=async()=>{if(confirm('حذف الصنف؟')){await sb.from('products').delete().eq('id',b.dataset.x);loadProds()}});
+}
+function reset(){edit=null;[fn,fe,fp,fs,fc].forEach(i=>i.value='');$('ft').textContent='إضافة صنف';$('cancel').classList.add('hid')}
+$('cancel').onclick=reset;
+$('save').onclick=async()=>{
+  const row={name:fn.value.trim(),emoji:fe.value.trim(),price:parseFloat(fp.value),stock:parseInt(fs.value,10),category:fc.value.trim()};
+  if(!row.name||isNaN(row.price)||isNaN(row.stock)){alert('اكتب الاسم والسعر والكمية');return}
+  const {error}=edit?await sb.from('products').update(row).eq('id',edit):await sb.from('products').insert(row);
+  if(error)alert(error.message);else{reset();loadProds()}
+};
+async function loadOrders(){
+  const {data}=await sb.from('orders').select('*').order('created_at',{ascending:false}).limit(100);
+  $('ords').innerHTML=(data||[]).map(o=>`<div class="card"><div class="row"><b>${E(o.customer_name)} — ${E(o.phone)}</b><span class="tag" style="flex:none">${E(o.status)}</span></div><small>${new Date(o.created_at).toLocaleString('ar-EG')} — ${E(o.address)}</small><div>${o.items.map(i=>E(i.name)+' ×'+i.qty).join('، ')}</div>${o.note?'<small>ملاحظة: '+E(o.note)+'</small>':''}<div><b>${money(o.total)}</b></div><div class="row" style="margin-top:8px">${['جديد','قيد التجهيز','تم التسليم','ملغي'].map(s=>`<button class="btn g" data-o="${o.id}" data-s="${s}">${s}</button>`).join('')}</div></div>`).join('')||'<div class="msg">لا توجد طلبات.</div>';
+  $('ords').querySelectorAll('[data-o]').forEach(b=>b.onclick=async()=>{await sb.from('orders').update({status:b.dataset.s}).eq('id',b.dataset.o);loadOrders()});
+}
+$('ref').onclick=loadOrders;gate();
+</script></body></html>
