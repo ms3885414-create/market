@@ -1,0 +1,90 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>لوحة المحل</title><meta name="robots" content="noindex"><link rel="stylesheet" href="style.css"></head><body>
+<header><h1 id="ttl">🔐 لوحة المحل</h1><button class="btn g hid" id="out">خروج</button></header>
+<main>
+<div id="login" class="card"><label>الإيميل</label><input id="em" type="email"><label>الباسورد</label><input id="pw" type="password">
+<label>كود الدعوة (أول مرة بس، لو معاك كود من صاحب النظام)</label><input id="code">
+<button class="btn" id="go" style="width:100%;margin-top:12px">دخول</button><div id="err" style="color:var(--dan);margin-top:8px"></div></div>
+<div id="app" class="hid">
+<div id="ban" class="msg hid" style="color:var(--dan)">⚠️ اشتراك المحل موقوف أو منتهي. تواصل مع صاحب النظام.</div>
+<div class="tabs" id="tabs"><button class="btn" data-t="st">الإحصائيات</button><button class="btn g" data-t="pr">الأصناف</button><button class="btn g" data-t="or">الطلبات</button><button class="btn g" data-t="se">الإعدادات</button></div>
+<section id="st"><div class="stats" id="stats"></div></section>
+<section id="pr" class="hid">
+ <div class="card"><h3 id="ft" style="margin-top:0">إضافة صنف</h3>
+ <div class="row"><div><label>اسم الصنف</label><input id="fn"></div><div><label>التصنيف</label><input id="fc"></div></div>
+ <div class="row"><div><label>السعر</label><input id="fp" type="number" step="0.5" min="0"></div><div><label>الكمية</label><input id="fs" type="number" min="0"></div></div>
+ <label>صورة المنتج</label><input id="fi" type="file" accept="image/*"><img id="prev" class="th hid" style="margin-top:8px;width:90px;height:90px">
+ <div class="row" style="margin-top:12px"><button class="btn" id="save">حفظ</button><button class="btn g hid" id="cancel">إلغاء</button></div></div>
+ <div class="card tbl"><table><tbody id="pt"></tbody></table></div></section>
+<section id="or" class="hid"><button class="btn g" id="ref">تحديث</button><div id="ords" style="margin-top:10px"></div></section>
+<section id="se" class="hid"><div class="card"><label>اسم المحل</label><input id="sn"><label>وصف قصير</label><input id="sd">
+ <label>الشعار</label><input id="sl" type="file" accept="image/*"><img id="lp" class="th hid" style="width:90px;height:90px;margin-top:8px"><button class="btn" id="ss" style="margin-top:12px">حفظ الإعدادات</button>
+ <p>لينك متجرك للزبائن:<br><b id="sk" style="word-break:break-all"></b></p></div></section>
+</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script><script src="app.js"></script>
+<script>
+let T=null,prods=[],edit=null,oldImg=null;const ST=['جديد','قيد التجهيز','تم التسليم','ملغي'];
+$('go').onclick=async()=>{
+  const em=$('em').value.trim(),pw=$('pw').value,code=$('code').value.trim();$('err').textContent='';
+  try{
+    if(code){const r=await sb.auth.signUp({email:em,password:pw});if(r.error&&!/registered/i.test(r.error.message))throw r.error}
+    const {error}=await sb.auth.signInWithPassword({email:em,password:pw});if(error)throw error;
+    if(code){const {error:e2}=await sb.rpc('claim_tenant',{p_code:code});if(e2)throw e2}
+  }catch(e){$('err').textContent='الخطأ: '+e.message}
+  gate();
+};
+$('out').onclick=async()=>{await sb.auth.signOut();gate()};
+async function gate(){
+  const {data:{session}}=await sb.auth.getSession();T=null;
+  if(session){const {data:pf}=await sb.from('profiles').select('tenant_id').maybeSingle();
+    if(pf){const {data}=await sb.from('tenants').select('*').eq('id',pf.tenant_id).single();T=data}
+    else $('err').textContent='الحساب ده مش مربوط بمحل. اكتب كود الدعوة وادخل.'}
+  $('login').classList.toggle('hid',!!T);$('app').classList.toggle('hid',!T);$('out').classList.toggle('hid',!session);
+  if(!T)return;
+  $('ttl').textContent='🏪 '+T.name;$('ban').classList.toggle('hid',okT(T));
+  $('sn').value=T.name;$('sd').value=T.description||'';$('sk').textContent=link('index.html?s='+T.slug);$('lp').src=T.logo||'';$('lp').classList.toggle('hid',!T.logo);
+  loadStats();loadProds();loadOrders();
+}
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('g',x!==b));
+  ['st','pr','or','se'].forEach(i=>$(i).classList.toggle('hid',i!==b.dataset.t));if(b.dataset.t==='st')loadStats()});
+async function loadStats(){
+  const n=new Date(),d0=new Date(n.getFullYear(),n.getMonth(),n.getDate()),w0=new Date(d0-6*864e5),m0=new Date(n.getFullYear(),n.getMonth(),1);
+  const {data}=await sb.from('orders').select('total_price,status,created_at').gte('created_at',new Date(Math.min(w0,m0)).toISOString()).limit(5000);
+  const L=data||[],ag=s=>{const r=L.filter(o=>o.status!=='ملغي'&&new Date(o.created_at)>=s);return `<b>${money(r.reduce((a,o)=>a+Number(o.total_price),0))}</b><small>${r.length} طلب</small>`};
+  $('stats').innerHTML=[['مبيعات اليوم',ag(d0)],['آخر 7 أيام',ag(w0)],['هذا الشهر',ag(m0)],['طلبات جديدة',`<b>${L.filter(o=>o.status==='جديد').length}</b><small>محتاجة متابعة</small>`]].map(x=>`<div class="card"><small>${x[0]}</small>${x[1]}</div>`).join('');
+}
+async function loadProds(){
+  const {data}=await sb.from('products').select('*').order('name');prods=data||[];
+  $('pt').innerHTML=prods.map(p=>`<tr><td>${p.image_url?`<img class="th" src="${E(p.image_url)}">`:'<div class="th"></div>'}</td><td>${E(p.name)}<br><small>${E(p.category||'')}</small></td><td>${money(p.price)}<br><small>مخزون: ${p.stock}</small></td><td style="white-space:nowrap"><button class="btn g" data-e="${p.id}">تعديل</button> <button class="btn d" data-x="${p.id}">حذف</button></td></tr>`).join('')||'<tr><td>لا توجد أصناف</td></tr>';
+  $('pt').querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const p=prods.find(x=>x.id===b.dataset.e);edit=p.id;oldImg=p.image_url;fn.value=p.name;fc.value=p.category||'';fp.value=p.price;fs.value=p.stock;fi.value='';
+    if(p.image_url){prev.src=p.image_url;prev.classList.remove('hid')}$('ft').textContent='تعديل صنف';$('cancel').classList.remove('hid');scrollTo(0,0)});
+  $('pt').querySelectorAll('[data-x]').forEach(b=>b.onclick=async()=>{if(confirm('حذف الصنف؟')){const {error}=await sb.from('products').delete().eq('id',b.dataset.x);if(error)alert(error.message);loadProds()}});
+}
+fi.onchange=()=>{if(fi.files[0]){prev.src=URL.createObjectURL(fi.files[0]);prev.classList.remove('hid')}};
+function reset(){edit=null;oldImg=null;[fn,fc,fp,fs,fi].forEach(i=>i.value='');prev.classList.add('hid');$('ft').textContent='إضافة صنف';$('cancel').classList.add('hid')}
+$('cancel').onclick=reset;
+$('save').onclick=async()=>{
+  const row={name:fn.value.trim(),category:fc.value.trim(),price:parseFloat(fp.value),stock:parseInt(fs.value,10)};
+  if(!row.name||isNaN(row.price)||isNaN(row.stock)){alert('اكتب الاسم والسعر والكمية');return}
+  $('save').disabled=true;
+  try{
+    row.image_url=fi.files[0]?await upImg(fi.files[0],T.id):oldImg;
+    const {error}=edit?await sb.from('products').update(row).eq('id',edit):await sb.from('products').insert({...row,tenant_id:T.id});
+    if(error)throw error;reset();loadProds();
+  }catch(e){alert('تعذر الحفظ: '+e.message)}
+  $('save').disabled=false;
+};
+async function loadOrders(){
+  const {data}=await sb.from('orders').select('*,order_items(*)').order('created_at',{ascending:false}).limit(100);
+  $('ords').innerHTML=(data||[]).map(o=>`<div class="card"><div class="row"><b>${E(o.customer_name)} — ${E(o.customer_phone)}</b><span class="tag" style="flex:none">${E(o.status)}</span></div><small>${new Date(o.created_at).toLocaleString('ar-EG')} — ${E(o.customer_address)}</small><div>${o.order_items.map(i=>E(i.name)+' ×'+i.quantity).join('، ')}</div>${o.note?'<small>ملاحظة: '+E(o.note)+'</small>':''}<div><b>${money(o.total_price)}</b></div><div class="row" style="margin-top:8px">${ST.map(s=>`<button class="btn g" data-o="${o.id}" data-s="${s}">${s}</button>`).join('')}</div></div>`).join('')||'<div class="msg">لا توجد طلبات.</div>';
+  $('ords').querySelectorAll('[data-o]').forEach(b=>b.onclick=async()=>{await sb.from('orders').update({status:b.dataset.s}).eq('id',b.dataset.o);loadOrders();loadStats()});
+}
+$('ref').onclick=()=>{loadOrders();loadStats()};
+$('ss').onclick=async()=>{
+  try{const row={name:sn.value.trim(),description:sd.value.trim()};if(sl.files[0])row.logo=await upImg(sl.files[0],T.id);
+    const {data,error}=await sb.from('tenants').update(row).eq('id',T.id).select();if(error)throw error;if(!data||!data.length)throw new Error('الحفظ ماتمش: الحساب مش مربوط بالمحل ده');alert('تم الحفظ ✅');gate()}catch(e){alert('تعذر الحفظ: '+e.message)}
+};
+gate();
+</script></body></html>

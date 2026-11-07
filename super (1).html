@@ -1,0 +1,39 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>أدمن النظام</title><meta name="robots" content="noindex"><link rel="stylesheet" href="style.css"></head><body>
+<header><h1>👑 أدمن النظام</h1><button class="btn g hid" id="out">خروج</button></header>
+<main>
+<div id="login" class="card"><label>الإيميل</label><input id="em" type="email"><label>الباسورد</label><input id="pw" type="password">
+<button class="btn" id="go" style="width:100%;margin-top:12px">دخول</button><div id="err" style="color:var(--dan);margin-top:8px"></div></div>
+<div id="app" class="hid">
+<div class="stats" id="tot"></div>
+<div class="card"><h3 style="margin-top:0">إضافة محل جديد</h3>
+<div class="row"><div><label>اسم المحل</label><input id="nn"></div><div><label>الرابط (إنجليزي: shop-a)</label><input id="ns" dir="ltr"></div></div>
+<button class="btn" id="add" style="margin-top:12px">إنشاء المحل</button><div id="res" class="msg hid" style="word-break:break-all"></div></div>
+<h3>المحلات</h3><div id="list"></div></div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script><script src="app.js"></script>
+<script>
+$('go').onclick=async()=>{$('err').textContent='';const {error}=await sb.auth.signInWithPassword({email:$('em').value.trim(),password:$('pw').value});if(error)$('err').textContent='الخطأ: '+error.message;gate()};
+$('out').onclick=async()=>{await sb.auth.signOut();gate()};
+async function gate(){
+  const {data:{session}}=await sb.auth.getSession();$('out').classList.toggle('hid',!session);
+  if(!session){$('login').classList.remove('hid');$('app').classList.add('hid');return}
+  const {data,error}=await sb.rpc('super_stats');
+  if(error){$('err').textContent='الحساب ده مش أدمن النظام.';$('login').classList.remove('hid');$('app').classList.add('hid');return}
+  $('login').classList.add('hid');$('app').classList.remove('hid');
+  $('tot').innerHTML=[['المحلات',data.length],['الطلبات',data.reduce((a,t)=>a+t.orders,0)],['إجمالي المبيعات',money(data.reduce((a,t)=>a+Number(t.sales),0))]].map(x=>`<div class="card"><small>${x[0]}</small><b>${x[1]}</b></div>`).join('');
+  $('list').innerHTML=data.map(t=>`<div class="card"><div class="row"><b>${E(t.name)}</b><span class="tag" style="flex:none">${t.status==='active'?'مفعّل':'موقوف'}</span></div>
+  <small>${t.orders} طلب — ${money(t.sales)}</small><div><a href="${E(link('index.html?s='+t.slug))}" target="_blank">رابط المتجر</a></div>
+  ${t.code?`<div class="msg">كود دعوة صاحب المحل: <b>${E(t.code)}</b></div>`:'<small>صاحب المحل سجّل حسابه ✅</small>'}
+  <label>تاريخ انتهاء الاشتراك</label><input type="date" value="${t.expires_at||''}" id="d_${t.id}">
+  <div class="row" style="margin-top:8px"><button class="btn" data-i="${t.id}" data-s="active">تفعيل / حفظ التاريخ</button><button class="btn d" data-i="${t.id}" data-s="suspended">إيقاف</button></div></div>`).join('')||'<div class="msg">لا توجد محلات.</div>';
+  $('list').querySelectorAll('[data-i]').forEach(b=>b.onclick=async()=>{const {error}=await sb.rpc('set_status',{p_id:b.dataset.i,p_status:b.dataset.s,p_expires:$('d_'+b.dataset.i).value||null});alert(error?error.message:(b.dataset.s==='active'?'تم التفعيل وحفظ التاريخ ✅':'تم إيقاف المحل ⛔'));gate()});
+}
+$('add').onclick=async()=>{
+  const {data,error}=await sb.rpc('create_tenant',{p_name:$('nn').value,p_slug:$('ns').value.trim()});
+  if(error){alert(error.message);return}
+  $('res').classList.remove('hid');$('res').innerHTML=`تم ✅<br>ابعت لصاحب المحل:<br>لينك اللوحة: <b>${E(link('owner.html'))}</b><br>كود الدعوة: <b>${E(data)}</b><br>(يدخل اللينك، يكتب إيميل وباسورد من عنده، ويحط الكود)<br>لينك المتجر للزبائن: <b>${E(link('index.html?s='+$('ns').value.trim()))}</b>`;
+  $('nn').value='';$('ns').value='';gate();
+};
+gate();
+</script></body></html>
