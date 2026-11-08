@@ -18,7 +18,7 @@
  <div class="card tbl"><table><tbody id="pt"></tbody></table></div></section>
 <section id="or" class="hid"><button class="btn g" id="ref">تحديث</button><div id="ords" style="margin-top:10px"></div></section>
 <section id="se" class="hid"><div class="card"><label>اسم المحل</label><input id="sn"><label>وصف قصير</label><input id="sd">
- <label>الشعار</label><input id="sl" type="file" accept="image/*"><img id="lp" class="th hid" style="width:90px;height:90px;margin-top:8px"><button class="btn" id="ss" style="margin-top:12px">حفظ الإعدادات</button>
+ <label>الشعار</label><input id="sl" type="file" accept="image/*"><button class="btn" id="ss" style="margin-top:12px">حفظ الإعدادات</button>
  <p>لينك متجرك للزبائن:<br><b id="sk" style="word-break:break-all"></b></p></div></section>
 </div></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -43,7 +43,7 @@ async function gate(){
   $('login').classList.toggle('hid',!!T);$('app').classList.toggle('hid',!T);$('out').classList.toggle('hid',!session);
   if(!T)return;
   $('ttl').textContent='🏪 '+T.name;$('ban').classList.toggle('hid',okT(T));
-  $('sn').value=T.name;$('sd').value=T.description||'';$('sk').textContent=link('index.html?s='+T.slug);$('lp').src=T.logo||'';$('lp').classList.toggle('hid',!T.logo);
+  $('sn').value=T.name;$('sd').value=T.description||'';$('sk').textContent=link('index.html?s='+T.slug);
   loadStats();loadProds();loadOrders();
 }
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
@@ -84,7 +84,7 @@ async function loadOrders(){
 $('ref').onclick=()=>{loadOrders();loadStats()};
 $('ss').onclick=async()=>{
   try{const row={name:sn.value.trim(),description:sd.value.trim()};if(sl.files[0])row.logo=await upImg(sl.files[0],T.id);
-    const {data,error}=await sb.from('tenants').update(row).eq('id',T.id).select();if(error)throw error;if(!data||!data.length)throw new Error('الحفظ ماتمش: الحساب مش مربوط بالمحل ده');alert('تم الحفظ ✅');gate()}catch(e){alert('تعذر الحفظ: '+e.message)}
+    const {error}=await sb.from('tenants').update(row).eq('id',T.id);if(error)throw error;alert('تم الحفظ');gate()}catch(e){alert('تعذر الحفظ: '+e.message)}
 };
 gate();
 </script></body></html>
