@@ -15,13 +15,28 @@
  <div class="row"><div><label>السعر</label><input id="fp" type="number" step="0.5" min="0"></div><div><label>الكمية</label><input id="fs" type="number" min="0"></div></div>
  <label>صورة المنتج</label><input id="fi" type="file" accept="image/*"><img id="prev" class="th hid" style="margin-top:8px;width:90px;height:90px">
  <div class="row" style="margin-top:12px"><button class="btn" id="save">حفظ</button><button class="btn g hid" id="cancel">إلغاء</button></div></div>
+ <div class="card"><h3 style="margin-top:0">استيراد من إكسيل</h3>
+ <small>الملف بنفس شكل شيت المنتجات (اسم الصنف، التصنيف، السعر، الكمية). لو حطيت صورة في الشيت في صف الصنف بتتربط تلقائي. الصنف اللي اسمه موجود بيتحدّث، والصف اللي سعره فاضي بيتخطّى.</small>
+ <input id="xf" type="file" accept=".xlsx,.xls,.csv" style="margin-top:8px"><label>الكمية الافتراضية للأصناف اللي من غير كمية في الشيت</label><input id="dq" type="number" min="0" value="100">
+ <button class="btn" id="imp" style="margin-top:8px">استيراد</button>
+ <h3>رفع صور بالجملة</h3>
+ <small>سمّي كل صورة باسم الصنف بالظبط (مثلًا: لبن كامل الدسم 1 لتر.jpg) واختار الصور كلها مرة واحدة.</small>
+ <input id="bf" type="file" accept="image/*" multiple style="margin-top:8px"><button class="btn" id="bi" style="margin-top:8px">رفع الصور</button>
+ <div id="im" class="msg hid"></div></div>
  <div class="card tbl"><table><tbody id="pt"></tbody></table></div></section>
 <section id="or" class="hid"><button class="btn g" id="ref">تحديث</button><div id="ords" style="margin-top:10px"></div></section>
 <section id="se" class="hid"><div class="card"><label>اسم المحل</label><input id="sn"><label>وصف قصير</label><input id="sd">
- <label>الشعار</label><input id="sl" type="file" accept="image/*"><button class="btn" id="ss" style="margin-top:12px">حفظ الإعدادات</button>
- <p>لينك متجرك للزبائن:<br><b id="sk" style="word-break:break-all"></b></p></div></section>
+ <label>الشعار</label><input id="sl" type="file" accept="image/*"><img id="lp" class="th hid" style="width:90px;height:90px;margin-top:8px"><button class="btn" id="ss" style="margin-top:12px">حفظ الإعدادات</button>
+ <p>لينك متجرك للزبائن:<br><b id="sk" style="word-break:break-all"></b></p></div>
+ <div class="card"><h3 style="margin-top:0">تغيير الباسورد</h3>
+ <label>الباسورد الحالي</label><input id="op" type="password" autocomplete="current-password">
+ <label>الباسورد الجديد (٨ حروف على الأقل)</label><input id="np" type="password" autocomplete="new-password">
+ <label>أكّد الباسورد الجديد</label><input id="np2" type="password" autocomplete="new-password">
+ <button class="btn" id="cp" style="margin-top:12px">تغيير الباسورد</button><div id="pm" class="msg hid"></div></div></section>
 </div></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="config.js"></script><script src="app.js"></script>
 <script>
 let T=null,prods=[],edit=null,oldImg=null;const ST=['جديد','قيد التجهيز','تم التسليم','ملغي'];
@@ -43,7 +58,7 @@ async function gate(){
   $('login').classList.toggle('hid',!!T);$('app').classList.toggle('hid',!T);$('out').classList.toggle('hid',!session);
   if(!T)return;
   $('ttl').textContent='🏪 '+T.name;$('ban').classList.toggle('hid',okT(T));
-  $('sn').value=T.name;$('sd').value=T.description||'';$('sk').textContent=link('index.html?s='+T.slug);
+  $('sn').value=T.name;$('sd').value=T.description||'';$('sk').textContent=link('index.html?s='+T.slug);$('lp').src=T.logo||'';$('lp').classList.toggle('hid',!T.logo);
   loadStats();loadProds();loadOrders();
 }
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
@@ -82,9 +97,97 @@ async function loadOrders(){
   $('ords').querySelectorAll('[data-o]').forEach(b=>b.onclick=async()=>{await sb.from('orders').update({status:b.dataset.s}).eq('id',b.dataset.o);loadOrders();loadStats()});
 }
 $('ref').onclick=()=>{loadOrders();loadStats()};
+async function xlsxImages(buf,sheetName){
+  const Z=await JSZip.loadAsync(buf),P=new DOMParser(),res={m:{},rich:Z.file(/xl\/richData\//).length>0};
+  const rd=async p=>{const f=Z.file(p);return f?P.parseFromString(await f.async('string'),'application/xml'):null};
+  const ln=(d,n)=>[...d.getElementsByTagName('*')].filter(e=>e.localName===n);
+  const at=(e,n)=>{const a=[...e.attributes].find(x=>x.localName===n);return a?a.value:null};
+  const abs=(from,t)=>{if(t[0]==='/')return t.slice(1);const o=[];for(const x of from.split('/').slice(0,-1).concat(t.split('/'))){if(x==='..')o.pop();else if(x!=='.')o.push(x)}return o.join('/')};
+  const relsOf=async p=>{const i=p.lastIndexOf('/');return rd(p.slice(0,i)+'/_rels/'+p.slice(i+1)+'.rels')};
+  const wbx=await rd('xl/workbook.xml'),wrel=await rd('xl/_rels/workbook.xml.rels');
+  const sh=ln(wbx,'sheet'),s=sh.find(e=>e.getAttribute('name')===sheetName)||sh[0];
+  const sp=abs('xl/workbook.xml',ln(wrel,'Relationship').find(e=>e.getAttribute('Id')===at(s,'id')).getAttribute('Target'));
+  const srel=await relsOf(sp);if(srel){
+    const d=ln(srel,'Relationship').find(e=>/\/drawing$/.test(e.getAttribute('Type')));
+    if(d){const dp=abs(sp,d.getAttribute('Target')),dr=await rd(dp),drel=await relsOf(dp),img={};
+      if(dr&&drel){ln(drel,'Relationship').forEach(e=>img[e.getAttribute('Id')]=abs(dp,e.getAttribute('Target')));
+        for(const a of [...ln(dr,'twoCellAnchor'),...ln(dr,'oneCellAnchor')]){
+          const fr=ln(a,'from')[0],bl=ln(a,'blip')[0];if(!fr||!bl)continue;
+          const row=+ln(fr,'row')[0].textContent,path=img[at(bl,'embed')];if(path&&res.m[row]===undefined)res.m[row]=path}}}}
+  res.blob=async path=>{const t={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp'}[path.split('.').pop().toLowerCase()];
+    return t&&Z.file(path)?new Blob([await Z.file(path).async('uint8array')],{type:t}):null};
+  return res;
+}
+function readSheet(ws,X,dq){
+  const A={n:['اسم الصنف','اسم المنتج'],c:['التصنيف','تصنيف المنتج'],p:['السعر (ج.م)','سعر المنتج'],q:['الكمية'],u:['رابط الصورة (اختياري)']};
+  const g=(r,k)=>{for(const h of A[k])if(r[h]!==undefined&&String(r[h]).trim()!=='')return r[h];return ''};
+  const rows=XLSX.utils.sheet_to_json(ws,{defval:'',blankrows:true}),r0=XLSX.utils.decode_range(ws['!ref']).s.r;
+  const ri={};for(const m of ws['!merges']||[])for(let r=m.s.r;r<=m.e.r;r++)if(ri[r]===undefined)ri[r]=m.s.r;
+  const pm={};for(const k in X.m){const t=ri[k]??+k;if(pm[t]===undefined)pm[t]=X.m[k]}
+  const out=[];let cat='',skip=0;
+  rows.forEach((r,i)=>{
+    const c=String(g(r,'c')).trim();if(c)cat=c;
+    const name=String(g(r,'n')).trim();if(!name)return;
+    const price=parseFloat(g(r,'p'));if(isNaN(price)||price<0){skip++;return}
+    const q=parseInt(g(r,'q'),10);
+    out.push({name,category:cat,price,stock:isNaN(q)?dq:q,url:String(g(r,'u')).trim(),pic:pm[r0+1+i]});
+  });
+  return {out,skip};
+}
+const norm=x=>String(x??'').trim().replace(/\s+/g,' ').toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي');
+const showm=t=>{$('im').textContent=t;$('im').classList.toggle('hid',!t)};
+$('imp').onclick=async()=>{
+  const f=$('xf').files[0];if(!f){alert('اختار ملف الإكسيل الأول');return}
+  $('imp').disabled=true;showm('جاري الاستيراد…');
+  try{
+    const buf=await f.arrayBuffer(),wb=XLSX.read(buf,{type:'array'}),sn=wb.Sheets['المنتجات']?'المنتجات':wb.SheetNames[0],ws=wb.Sheets[sn];
+    let X={m:{},rich:false};try{X=await xlsxImages(buf,sn)}catch(e){console.warn(e)}
+    const {out,skip:sk}=readSheet(ws,X,parseInt($('dq').value,10)||0);
+    const ex=new Map(prods.map(p=>[norm(p.name),p]));const ins=[];let upd=0,skip=sk,pics=0;
+    for(const it of out){
+      const old=ex.get(norm(it.name));if(old&&!old.id){skip++;continue}
+      const row={name:it.name,category:it.category,price:it.price,stock:it.stock};
+      if(/^https?:\/\//.test(it.url))row.image_url=it.url;
+      else if(it.pic){showm(`جاري رفع صورة: ${it.name}`);try{const b=await X.blob(it.pic);if(b){row.image_url=await upImg(b,T.id);pics++}}catch(e){console.warn(e)}}
+      if(old){const {error}=await sb.from('products').update(row).eq('id',old.id);if(error)throw error;upd++}
+      else{ins.push({...row,tenant_id:T.id});ex.set(norm(it.name),{})}
+    }
+    for(let k=0;k<ins.length;k+=100){const {error}=await sb.from('products').insert(ins.slice(k,k+100));if(error)throw error}
+    showm(`تم ✅ ${ins.length} صنف جديد، ${upd} اتحدّث، ${pics} صورة اتربطت، ${skip} اتخطّى (السعر فاضي أو اسم مكرر).`+(!pics&&X.rich?' ⚠️ الصور اتحطت "داخل الخلية"، حطها بـ Insert > Pictures > Place Over Cells.':''));
+    $('xf').value='';loadProds();
+  }catch(e){showm('الخطأ: '+e.message)}
+  $('imp').disabled=false;
+};
+$('bi').onclick=async()=>{
+  const files=[...$('bf').files];if(!files.length){alert('اختار الصور الأول');return}
+  const m=new Map(prods.map(p=>[norm(p.name),p]));let ok=0;const miss=[];$('bi').disabled=true;
+  for(let i=0;i<files.length;i++){
+    const f=files[i],p=m.get(norm(f.name.replace(/\.[^.]+$/,'')));showm(`جاري رفع ${i+1} من ${files.length}…`);
+    if(!p){miss.push(f.name);continue}
+    try{const url=await upImg(f,T.id);const {error}=await sb.from('products').update({image_url:url}).eq('id',p.id);if(error)throw error;ok++}
+    catch(e){miss.push(f.name+' ('+e.message+')')}
+  }
+  showm(`تم رفع ${ok} صورة.`+(miss.length?` مااتربطش: ${miss.join('، ')}`:''));$('bf').value='';$('bi').disabled=false;loadProds();
+};
+const pmsg=t=>{$('pm').textContent=t;$('pm').classList.toggle('hid',!t)};
+$('cp').onclick=async()=>{
+  const o=$('op').value,n=$('np').value;
+  if(!o||!n){pmsg('اكتب الباسورد الحالي والجديد');return}
+  if(n.length<8){pmsg('الباسورد الجديد لازم يكون ٨ حروف على الأقل');return}
+  if(n!==$('np2').value){pmsg('الباسورد الجديد وتأكيده مش متطابقين');return}
+  $('cp').disabled=true;
+  try{
+    const {data:{user}}=await sb.auth.getUser();
+    const v=await sb.auth.signInWithPassword({email:user.email,password:o});
+    if(v.error)throw new Error('الباسورد الحالي غلط');
+    const {error}=await sb.auth.updateUser({password:n});if(error)throw error;
+    ['op','np','np2'].forEach(i=>$(i).value='');pmsg('تم تغيير الباسورد ✅');
+  }catch(e){pmsg('الخطأ: '+e.message)}
+  $('cp').disabled=false;
+};
 $('ss').onclick=async()=>{
   try{const row={name:sn.value.trim(),description:sd.value.trim()};if(sl.files[0])row.logo=await upImg(sl.files[0],T.id);
-    const {error}=await sb.from('tenants').update(row).eq('id',T.id);if(error)throw error;alert('تم الحفظ');gate()}catch(e){alert('تعذر الحفظ: '+e.message)}
+    const {data,error}=await sb.from('tenants').update(row).eq('id',T.id).select();if(error)throw error;if(!data||!data.length)throw new Error('الحفظ ماتمش: الحساب مش مربوط بالمحل ده');alert('تم الحفظ ✅');gate()}catch(e){alert('تعذر الحفظ: '+e.message)}
 };
 gate();
 </script></body></html>
