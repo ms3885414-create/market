@@ -12,7 +12,8 @@
 <section id="pr" class="hid">
  <div class="card"><h3 id="ft" style="margin-top:0">إضافة صنف</h3>
  <div class="row"><div><label>اسم الصنف</label><input id="fn"></div><div><label>التصنيف</label><input id="fc"></div></div>
- <div class="row"><div><label>السعر</label><input id="fp" type="number" step="0.5" min="0"></div><div><label>الكمية</label><input id="fs" type="number" min="0"></div></div>
+ <div class="row"><div><label>وحدة البيع</label><select id="fu"><option value="piece">بالقطعة</option><option value="kg">بالكيلو (السعر = سعر الكيلو)</option></select></div></div>
+ <div class="row"><div><label>السعر</label><input id="fp" type="number" step="0.5" min="0"></div><div><label>الكمية (قطع أو كيلو)</label><input id="fs" type="number" step="0.125" min="0"></div></div>
  <label>صورة المنتج</label><input id="fi" type="file" accept="image/*"><img id="prev" class="th hid" style="margin-top:8px;width:90px;height:90px">
  <div class="row" style="margin-top:12px"><button class="btn" id="save">حفظ</button><button class="btn g hid" id="cancel">إلغاء</button></div></div>
  <div class="card"><h3 style="margin-top:0">استيراد من إكسيل</h3>
@@ -23,8 +24,8 @@
  <small>سمّي كل صورة باسم الصنف بالظبط (مثلًا: لبن كامل الدسم 1 لتر.jpg) واختار الصور كلها مرة واحدة.</small>
  <input id="bf" type="file" accept="image/*" multiple style="margin-top:8px"><button class="btn" id="bi" style="margin-top:8px">رفع الصور</button>
  <div id="im" class="msg hid"></div></div>
- <div class="card tbl"><table><tbody id="pt"></tbody></table></div></section>
-<section id="or" class="hid"><button class="btn g" id="ref">تحديث</button><div id="ords" style="margin-top:10px"></div></section>
+ <input id="ps" placeholder="🔍 ابحث في الأصناف (الاسم أو التصنيف)" style="margin-bottom:10px"><div class="card tbl"><table><tbody id="pt"></tbody></table></div></section>
+<section id="or" class="hid"><button class="btn g" id="ref">تحديث</button><input id="os" placeholder="🔍 ابحث باسم الزبون أو الموبايل أو رقم الطلب" style="margin-top:10px"><div id="ords" style="margin-top:10px"></div></section>
 <section id="se" class="hid"><div class="card"><label>اسم المحل</label><input id="sn"><label>وصف قصير</label><input id="sd">
  <label>الشعار</label><input id="sl" type="file" accept="image/*"><img id="lp" class="th hid" style="width:90px;height:90px;margin-top:8px"><button class="btn" id="ss" style="margin-top:12px">حفظ الإعدادات</button>
  <p>لينك متجرك للزبائن:<br><b id="sk" style="word-break:break-all"></b></p></div>
@@ -39,7 +40,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="config.js"></script><script src="app.js"></script>
 <script>
-let T=null,prods=[],edit=null,oldImg=null;const ST=['جديد','قيد التجهيز','تم التسليم','ملغي'];
+let T=null,prods=[],edit=null,oldImg=null,ordersData=[];const ST=['جديد','قيد التجهيز','تم التسليم','ملغي'];
 $('go').onclick=async()=>{
   const em=$('em').value.trim(),pw=$('pw').value,code=$('code').value.trim();$('err').textContent='';
   try{
@@ -71,17 +72,20 @@ async function loadStats(){
   $('stats').innerHTML=[['مبيعات اليوم',ag(d0)],['آخر 7 أيام',ag(w0)],['هذا الشهر',ag(m0)],['طلبات جديدة',`<b>${L.filter(o=>o.status==='جديد').length}</b><small>محتاجة متابعة</small>`]].map(x=>`<div class="card"><small>${x[0]}</small>${x[1]}</div>`).join('');
 }
 async function loadProds(){
-  const {data}=await sb.from('products').select('*').order('name');prods=data||[];
-  $('pt').innerHTML=prods.map(p=>`<tr><td>${p.image_url?`<img class="th" src="${E(p.image_url)}">`:'<div class="th"></div>'}</td><td>${E(p.name)}<br><small>${E(p.category||'')}</small></td><td>${money(p.price)}<br><small>مخزون: ${p.stock}</small></td><td style="white-space:nowrap"><button class="btn g" data-e="${p.id}">تعديل</button> <button class="btn d" data-x="${p.id}">حذف</button></td></tr>`).join('')||'<tr><td>لا توجد أصناف</td></tr>';
-  $('pt').querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const p=prods.find(x=>x.id===b.dataset.e);edit=p.id;oldImg=p.image_url;fn.value=p.name;fc.value=p.category||'';fp.value=p.price;fs.value=p.stock;fi.value='';
+  const {data}=await sb.from('products').select('*').order('name');prods=data||[];renderProds();
+}
+function renderProds(){
+  const qv=norm($('ps').value);
+  $('pt').innerHTML=prods.filter(p=>!qv||norm(p.name).includes(qv)||norm(p.category||'').includes(qv)).map(p=>`<tr><td>${p.image_url?`<img class="th" src="${E(p.image_url)}">`:'<div class="th"></div>'}</td><td>${E(p.name)}<br><small>${E(p.category||'')}</small></td><td>${money(p.price)}${p.unit==='kg'?' / كيلو':''}<br><small>مخزون: ${p.stock}${p.unit==='kg'?' كجم':''}</small></td><td style="white-space:nowrap"><button class="btn g" data-e="${p.id}">تعديل</button> <button class="btn d" data-x="${p.id}">حذف</button></td></tr>`).join('')||'<tr><td>لا توجد أصناف</td></tr>';
+  $('pt').querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const p=prods.find(x=>x.id===b.dataset.e);edit=p.id;oldImg=p.image_url;fn.value=p.name;fc.value=p.category||'';fp.value=p.price;fs.value=p.stock;fu.value=p.unit||'piece';fi.value='';
     if(p.image_url){prev.src=p.image_url;prev.classList.remove('hid')}$('ft').textContent='تعديل صنف';$('cancel').classList.remove('hid');scrollTo(0,0)});
   $('pt').querySelectorAll('[data-x]').forEach(b=>b.onclick=async()=>{if(confirm('حذف الصنف؟')){const {error}=await sb.from('products').delete().eq('id',b.dataset.x);if(error)alert(error.message);loadProds()}});
 }
 fi.onchange=()=>{if(fi.files[0]){prev.src=URL.createObjectURL(fi.files[0]);prev.classList.remove('hid')}};
-function reset(){edit=null;oldImg=null;[fn,fc,fp,fs,fi].forEach(i=>i.value='');prev.classList.add('hid');$('ft').textContent='إضافة صنف';$('cancel').classList.add('hid')}
+function reset(){edit=null;oldImg=null;[fn,fc,fp,fs,fi].forEach(i=>i.value='');fu.value='piece';prev.classList.add('hid');$('ft').textContent='إضافة صنف';$('cancel').classList.add('hid')}
 $('cancel').onclick=reset;
 $('save').onclick=async()=>{
-  const row={name:fn.value.trim(),category:fc.value.trim(),price:parseFloat(fp.value),stock:parseInt(fs.value,10)};
+  const row={name:fn.value.trim(),category:fc.value.trim(),price:parseFloat(fp.value),stock:parseFloat(fs.value),unit:fu.value};
   if(!row.name||isNaN(row.price)||isNaN(row.stock)){alert('اكتب الاسم والسعر والكمية');return}
   $('save').disabled=true;
   try{
@@ -93,10 +97,14 @@ $('save').onclick=async()=>{
 };
 async function loadOrders(){
   const {data}=await sb.from('orders').select('*,order_items(*)').order('created_at',{ascending:false}).limit(100);
-  $('ords').innerHTML=(data||[]).map(o=>`<div class="card"><div class="row"><b>${E(o.customer_name)} — ${E(o.customer_phone)}</b><span class="tag" style="flex:none">${E(o.status)}</span></div><small>${new Date(o.created_at).toLocaleString('ar-EG')} — ${E(o.customer_address)}</small><div>${o.order_items.map(i=>E(i.name)+' ×'+i.quantity).join('، ')}</div>${o.note?'<small>ملاحظة: '+E(o.note)+'</small>':''}<div><b>${money(o.total_price)}</b></div><div class="row" style="margin-top:8px">${ST.map(s=>`<button class="btn g" data-o="${o.id}" data-s="${s}">${s}</button>`).join('')}</div></div>`).join('')||'<div class="msg">لا توجد طلبات.</div>';
+  ordersData=data||[];renderOrders();
+}
+function renderOrders(){
+  const qv=norm($('os').value);
+  $('ords').innerHTML=ordersData.filter(o=>!qv||norm(o.customer_name).includes(qv)||String(o.customer_phone).includes(qv.replace(/\s/g,''))||o.id.startsWith(qv)).map(o=>`<div class="card"><div class="row"><b>${E(o.customer_name)} — ${E(o.customer_phone)}</b><span class="tag" style="flex:none">${E(o.status)}</span></div><small>${new Date(o.created_at).toLocaleString('ar-EG')} — ${E(o.customer_address)}</small><div>${o.order_items.map(i=>E(i.name)+' ×'+qtyText(i.quantity,i.unit)).join('، ')}</div>${o.note?'<small>ملاحظة: '+E(o.note)+'</small>':''}<div><b>${money(o.total_price)}</b></div><div class="row" style="margin-top:8px">${ST.map(s=>`<button class="btn g" data-o="${o.id}" data-s="${s}">${s}</button>`).join('')}</div></div>`).join('')||'<div class="msg">لا توجد طلبات.</div>';
   $('ords').querySelectorAll('[data-o]').forEach(b=>b.onclick=async()=>{await sb.from('orders').update({status:b.dataset.s}).eq('id',b.dataset.o);loadOrders();loadStats()});
 }
-$('ref').onclick=()=>{loadOrders();loadStats()};
+$('ref').onclick=()=>{loadOrders();loadStats()};$('ps').oninput=renderProds;$('os').oninput=renderOrders;
 async function xlsxImages(buf,sheetName){
   const Z=await JSZip.loadAsync(buf),P=new DOMParser(),res={m:{},rich:Z.file(/xl\/richData\//).length>0};
   const rd=async p=>{const f=Z.file(p);return f?P.parseFromString(await f.async('string'),'application/xml'):null};
@@ -119,7 +127,7 @@ async function xlsxImages(buf,sheetName){
   return res;
 }
 function readSheet(ws,X,dq){
-  const A={n:['اسم الصنف','اسم المنتج'],c:['التصنيف','تصنيف المنتج'],p:['السعر (ج.م)','سعر المنتج'],q:['الكمية'],u:['رابط الصورة (اختياري)']};
+  const A={n:['اسم الصنف','اسم المنتج'],c:['التصنيف','تصنيف المنتج'],p:['السعر (ج.م)','سعر المنتج'],q:['الكمية'],w:['الوحدة'],u:['رابط الصورة (اختياري)']};
   const g=(r,k)=>{for(const h of A[k])if(r[h]!==undefined&&String(r[h]).trim()!=='')return r[h];return ''};
   const rows=XLSX.utils.sheet_to_json(ws,{defval:'',blankrows:true}),r0=XLSX.utils.decode_range(ws['!ref']).s.r;
   const ri={};for(const m of ws['!merges']||[])for(let r=m.s.r;r<=m.e.r;r++)if(ri[r]===undefined)ri[r]=m.s.r;
@@ -129,12 +137,11 @@ function readSheet(ws,X,dq){
     const c=String(g(r,'c')).trim();if(c)cat=c;
     const name=String(g(r,'n')).trim();if(!name)return;
     const price=parseFloat(g(r,'p'));if(isNaN(price)||price<0){skip++;return}
-    const q=parseInt(g(r,'q'),10);
-    out.push({name,category:cat,price,stock:isNaN(q)?dq:q,url:String(g(r,'u')).trim(),pic:pm[r0+1+i]});
+    const q=parseFloat(g(r,'q'));
+    out.push({name,category:cat,price,stock:isNaN(q)?dq:q,url:String(g(r,'u')).trim(),pic:pm[r0+1+i],unit:/كيلو|كجم|وزن|kg/i.test(String(g(r,'w')))?'kg':'piece'});
   });
   return {out,skip};
 }
-const norm=x=>String(x??'').trim().replace(/\s+/g,' ').toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي');
 const showm=t=>{$('im').textContent=t;$('im').classList.toggle('hid',!t)};
 $('imp').onclick=async()=>{
   const f=$('xf').files[0];if(!f){alert('اختار ملف الإكسيل الأول');return}
@@ -146,7 +153,7 @@ $('imp').onclick=async()=>{
     const ex=new Map(prods.map(p=>[norm(p.name),p]));const ins=[];let upd=0,skip=sk,pics=0;
     for(const it of out){
       const old=ex.get(norm(it.name));if(old&&!old.id){skip++;continue}
-      const row={name:it.name,category:it.category,price:it.price,stock:it.stock};
+      const row={name:it.name,category:it.category,price:it.price,stock:it.stock,unit:it.unit};
       if(/^https?:\/\//.test(it.url))row.image_url=it.url;
       else if(it.pic){showm(`جاري رفع صورة: ${it.name}`);try{const b=await X.blob(it.pic);if(b){row.image_url=await upImg(b,T.id);pics++}}catch(e){console.warn(e)}}
       if(old){const {error}=await sb.from('products').update(row).eq('id',old.id);if(error)throw error;upd++}

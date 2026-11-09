@@ -8,7 +8,7 @@ header h1{font-size:18px;margin:0;flex:1}main{max-width:900px;margin:0 auto;padd
 .grid .card{margin:0;text-align:center}.em{font-size:36px}.pr{color:var(--pri);font-weight:700}small{color:var(--mut)}
 .btn{background:var(--pri);color:#fff;border:0;border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}
 .btn:disabled{opacity:.5}.btn.g{background:none;color:var(--tx);border:1px solid var(--bd)}.btn.d{background:var(--dan)}
-input,textarea{width:100%;padding:9px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+input,textarea,select{width:100%;padding:9px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
 label{display:block;font-size:13px;color:var(--mut);margin:8px 0 3px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1}
 .cats{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px}.cats .btn{white-space:nowrap;flex:none}
 .cart{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--bd);padding:10px 14px;max-height:75vh;overflow:auto}

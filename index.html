@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>المتجر</title><link rel="stylesheet" href="style.css"></head><body>
 <header><img id="logo" class="hid" style="height:34px;border-radius:8px"><h1 id="ttl">🛒 المتاجر</h1></header>
-<main><div id="msg" class="msg hid"></div><div id="shops"></div><div id="cats" class="cats"></div><div id="grid" class="grid"></div></main>
+<main><div id="msg" class="msg hid"></div><div id="shops"></div><input id="q" class="hid" placeholder="🔍 ابحث عن منتج..." style="margin-bottom:10px"><div id="cats" class="cats"></div><div id="grid" class="grid"></div></main>
 <div id="cart" class="cart hid"><div class="row" id="bar" style="cursor:pointer;font-weight:700"><span id="info"></span><span style="flex:none">⌃</span></div>
 <div id="body" class="hid"><div id="lines"></div><label>الاسم</label><input id="n"><label>رقم الموبايل</label><input id="p" type="tel">
 <label>العنوان</label><input id="a"><label>ملاحظات</label><input id="t"><button class="btn" id="send" style="width:100%;margin-top:12px">تأكيد الطلب</button></div></div>
@@ -19,22 +19,26 @@ async function init(){
   T=t;$('ttl').textContent=t.name;document.title=t.name;if(t.logo){$('logo').src=t.logo;$('logo').classList.remove('hid')}
   if(t.description)say(t.description);
   const {data:p,error}=await sb.from('products').select('*').eq('tenant_id',t.id).order('name');
-  if(error)return say('تعذر تحميل المنتجات');products=p;if(!p.length)say('لا توجد منتجات بعد.');render();
+  if(error)return say('تعذر تحميل المنتجات');products=p;if(!p.length)say('لا توجد منتجات بعد.');$('q').classList.remove('hid');$('q').oninput=render;render();
 }
 function render(){
-  const cats=['الكل',...new Set(products.map(p=>p.category).filter(Boolean))];
+  const cats=['الكل',...new Set(products.map(p=>p.category).filter(Boolean))],qv=norm($('q').value);
   $('cats').innerHTML=cats.map(c=>`<button class="btn ${c===cat?'':'g'}" data-c="${E(c)}">${E(c)}</button>`).join('');
   $('cats').querySelectorAll('button').forEach(b=>b.onclick=()=>{cat=b.dataset.c;render()});
-  $('grid').innerHTML=products.filter(p=>cat==='الكل'||p.category===cat).map(p=>`<div class="card">${p.image_url?`<img class="pimg" src="${E(p.image_url)}" alt="">`:'<div class="pimg">📦</div>'}<b>${E(p.name)}</b><div class="pr">${money(p.price)}</div><small>${p.stock>0?'متاح':'غير متاح'}</small><button class="btn" style="width:100%;margin-top:8px" data-id="${p.id}" ${p.stock>0?'':'disabled'}>أضف للسلة</button></div>`).join('');
-  $('grid').querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>add(b.dataset.id,1));cartUI();
+  const L=products.filter(p=>(cat==='الكل'||p.category===cat)&&(!qv||norm(p.name).includes(qv)));
+  $('grid').innerHTML=L.map(p=>{const kg=p.unit==='kg',ok=p.stock>0;
+    const btns=kg?`<div class="row" style="margin-top:8px;gap:4px">${[['تمن',.125],['ربع',.25],['نص',.5],['كيلو',1]].map(([t,d])=>`<button class="btn g" style="padding:6px 2px;font-size:13px" data-id="${p.id}" data-d="${d}" ${ok?'':'disabled'}>${t}</button>`).join('')}</div>`
+      :`<button class="btn" style="width:100%;margin-top:8px" data-id="${p.id}" data-d="1" ${ok?'':'disabled'}>أضف للسلة</button>`;
+    return `<div class="card">${p.image_url?`<img class="pimg" src="${E(p.image_url)}" alt="">`:'<div class="pimg">📦</div>'}<b>${E(p.name)}</b><div class="pr">${money(p.price)}${kg?' / كيلو':''}</div><small>${ok?(kg?'متاح: '+weightText(p.stock):'متاح'):'غير متاح'}</small>${btns}</div>`}).join('')||(qv?'<div class="msg">مفيش منتج بالاسم ده.</div>':'');
+  $('grid').querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>add(b.dataset.id,+b.dataset.d));cartUI();
 }
-function add(id,d){const p=products.find(x=>x.id===id),n=(cart[id]||0)+d;if(n<=0)delete cart[id];else cart[id]=Math.min(n,p.stock);cartUI()}
+function add(id,d){const p=products.find(x=>x.id===id),n=(cart[id]||0)+d,mx=p.unit==='kg'?Math.floor(p.stock*8)/8:Math.floor(p.stock),v=Math.min(n,mx);if(v<=0)delete cart[id];else cart[id]=v;cartUI()}
 function cartUI(){
-  const ids=Object.keys(cart).filter(id=>products.some(p=>p.id===id));let tot=0,cnt=0;
-  $('lines').innerHTML=ids.map(id=>{const p=products.find(x=>x.id===id),q=cart[id];tot+=p.price*q;cnt+=q;
-    return `<div class="line"><span>${E(p.name)}</span><span><button class="btn g" data-a="-1" data-id="${id}">−</button> <b>${q}</b> <button class="btn g" data-a="1" data-id="${id}">+</button></span><span>${money(p.price*q)}</span></div>`}).join('');
+  const ids=Object.keys(cart).filter(id=>products.some(p=>p.id===id));let tot=0;
+  $('lines').innerHTML=ids.map(id=>{const p=products.find(x=>x.id===id),q=cart[id],st=p.unit==='kg'?.125:1,t=Math.round(p.price*q*100)/100;tot+=t;
+    return `<div class="line"><span>${E(p.name)}</span><span><button class="btn g" data-a="${-st}" data-id="${id}">−</button> <b>${qtyText(q,p.unit)}</b> <button class="btn g" data-a="${st}" data-id="${id}">+</button></span><span>${money(t)}</span></div>`}).join('');
   $('lines').querySelectorAll('button').forEach(b=>b.onclick=()=>add(b.dataset.id,+b.dataset.a));
-  $('info').textContent=`السلة: ${cnt} صنف — ${money(tot)}`;$('cart').classList.toggle('hid',!cnt);
+  $('info').textContent=`السلة: ${ids.length} صنف — ${money(tot)}`;$('cart').classList.toggle('hid',!ids.length);
 }
 $('bar').onclick=()=>$('body').classList.toggle('hid');
 $('send').onclick=async()=>{
