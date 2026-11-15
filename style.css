@@ -21,10 +21,3 @@ label{display:block;font-size:13px;color:var(--mut);margin:8px 0 3px}.row{displa
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
        gap:10px;margin-bottom:12px}
 .stats .card{margin:0;text-align:center}.stats b{font-size:20px;color:var(--pri);display:block}
-.grid{grid-template-columns:1fr;gap:16px}
-.grid .pimg{aspect-ratio:1/1;max-height:420px;border-radius:12px}
-.grid div.pimg{font-size:80px}
-.grid .card b{font-size:17px;display:block;margin:6px 0}
-.card .pr{font-size:20px}
-@media(min-width:760px){.grid{grid-template-columns:repeat(2,1fr)}}
-@media(min-width:1100px){.grid{grid-template-columns:repeat(3,1fr)}}
