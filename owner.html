@@ -7,11 +7,12 @@
 <button class="btn" id="go" style="width:100%;margin-top:12px">دخول</button><div id="err" style="color:var(--dan);margin-top:8px"></div></div>
 <div id="app" class="hid">
 <div id="ban" class="msg hid" style="color:var(--dan)">⚠️ اشتراك المحل موقوف أو منتهي. تواصل مع صاحب النظام.</div>
+<div id="ot" class="hid" style="position:fixed;top:64px;left:10px;right:10px;background:#1f8a4c;color:#fff;padding:12px;border-radius:8px;z-index:30;text-align:center;font-weight:700"></div>
 <div class="tabs" id="tabs"><button class="btn" data-t="st">الإحصائيات</button><button class="btn g" data-t="pr">الأصناف</button><button class="btn g" data-t="or">الطلبات</button><button class="btn g" data-t="se">الإعدادات</button></div>
 <section id="st"><div class="stats" id="stats"></div></section>
 <section id="pr" class="hid">
  <div class="card"><h3 id="ft" style="margin-top:0">إضافة صنف</h3>
- <div class="row"><div><label>اسم الصنف</label><input id="fn"></div><div><label>التصنيف</label><input id="fc"></div></div>
+ <div class="row"><div><label>اسم الصنف</label><input id="fn"></div><div><label>القسم</label><div class="row" style="flex-wrap:nowrap"><select id="fc"></select><button type="button" class="btn g" id="addcat" style="flex:none">➕ قسم</button></div></div></div>
  <div class="row"><div><label>وحدة البيع</label><select id="fu"><option value="piece">بالقطعة</option><option value="kg">بالكيلو (السعر = سعر الكيلو)</option></select></div></div>
  <div class="row"><div><label>السعر</label><input id="fp" type="number" step="0.5" min="0"></div><div><label>الكمية (قطع أو كيلو)</label><input id="fs" type="number" step="0.125" min="0"></div></div>
  <label>صورة المنتج</label><input id="fi" type="file" accept="image/*"><img id="prev" class="th hid" style="margin-top:8px;width:90px;height:90px">
@@ -24,7 +25,8 @@
  <small>سمّي كل صورة باسم الصنف بالظبط (مثلًا: لبن كامل الدسم 1 لتر.jpg) واختار الصور كلها مرة واحدة.</small>
  <input id="bf" type="file" accept="image/*" multiple style="margin-top:8px"><button class="btn" id="bi" style="margin-top:8px">رفع الصور</button>
  <div id="im" class="msg hid"></div></div>
- <input id="ps" placeholder="🔍 ابحث في الأصناف (الاسم أو التصنيف)" style="margin-bottom:10px"><div class="card tbl"><table><tbody id="pt"></tbody></table></div></section>
+ <input id="ps" placeholder="🔍 ابحث في الأصناف (الاسم أو التصنيف)" style="margin-bottom:8px">
+ <div class="row" style="margin-bottom:10px"><label style="display:flex;gap:6px;align-items:center;margin:0"><input id="pn" type="checkbox" style="width:auto"> بدون صورة فقط</label><small id="pc"></small></div><div class="card tbl"><table><tbody id="pt"></tbody></table></div></section>
 <section id="or" class="hid"><button class="btn g" id="ref">تحديث</button><input id="os" placeholder="🔍 ابحث باسم الزبون أو الموبايل أو رقم الطلب" style="margin-top:10px"><div id="ords" style="margin-top:10px"></div></section>
 <section id="se" class="hid"><div class="card"><label>اسم المحل</label><input id="sn"><label>وصف قصير</label><input id="sd">
  <label>الشعار</label><input id="sl" type="file" accept="image/*"><img id="lp" class="th hid" style="width:90px;height:90px;margin-top:8px"><button class="btn" id="ss" style="margin-top:12px">حفظ الإعدادات</button>
@@ -60,7 +62,8 @@ async function gate(){
   if(!T)return;
   $('ttl').textContent='🏪 '+T.name;$('ban').classList.toggle('hid',okT(T));
   $('sn').value=T.name;$('sd').value=T.description||'';$('sk').textContent=link('index.html?s='+T.slug);$('lp').src=T.logo||'';$('lp').classList.toggle('hid',!T.logo);
-  loadStats();loadProds();loadOrders();
+  try{extraCats=JSON.parse(localStorage.getItem('cats_'+T.id)||'[]')}catch(e){}
+  loadStats();loadProds();loadOrders();startLive();
 }
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('g',x!==b));
@@ -72,13 +75,18 @@ async function loadStats(){
   $('stats').innerHTML=[['مبيعات اليوم',ag(d0)],['آخر 7 أيام',ag(w0)],['هذا الشهر',ag(m0)],['طلبات جديدة',`<b>${L.filter(o=>o.status==='جديد').length}</b><small>محتاجة متابعة</small>`]].map(x=>`<div class="card"><small>${x[0]}</small>${x[1]}</div>`).join('');
 }
 async function loadProds(){
-  const {data}=await sb.from('products').select('*').order('name');prods=data||[];renderProds();
+  const {data}=await sb.from('products').select('*').order('name');prods=data||[];fillCats($('fc').value);renderProds();
 }
 function renderProds(){
-  const qv=norm($('ps').value);
-  $('pt').innerHTML=prods.filter(p=>!qv||norm(p.name).includes(qv)||norm(p.category||'').includes(qv)).map(p=>`<tr><td>${p.image_url?`<img class="th" src="${E(p.image_url)}">`:'<div class="th"></div>'}</td><td>${E(p.name)}<br><small>${E(p.category||'')}</small></td><td>${money(p.price)}${p.unit==='kg'?' / كيلو':''}<br><small>مخزون: ${p.stock}${p.unit==='kg'?' كجم':''}</small></td><td style="white-space:nowrap"><button class="btn g" data-e="${p.id}">تعديل</button> <button class="btn d" data-x="${p.id}">حذف</button></td></tr>`).join('')||'<tr><td>لا توجد أصناف</td></tr>';
-  $('pt').querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const p=prods.find(x=>x.id===b.dataset.e);edit=p.id;oldImg=p.image_url;fn.value=p.name;fc.value=p.category||'';fp.value=p.price;fs.value=p.stock;fu.value=p.unit||'piece';fi.value='';
+  const qv=norm($('ps').value),noimg=$('pn').checked;
+  $('pc').textContent='بدون صورة: '+prods.filter(p=>!p.image_url).length+' من '+prods.length;
+  $('pt').innerHTML=prods.filter(p=>(!qv||norm(p.name).includes(qv)||norm(p.category||'').includes(qv))&&(!noimg||!p.image_url)).map(p=>`<tr><td>${p.image_url?`<img class="th" loading="lazy" src="${E(p.image_url)}">`:'<div class="th"></div>'}</td><td>${E(p.name)}<br><small>${E(p.category||'')}</small></td><td>${money(p.price)}${p.unit==='kg'?' / كيلو':''}<br><small>مخزون: ${p.stock}${p.unit==='kg'?' كجم':''}</small></td><td style="white-space:nowrap"><label class="btn g" style="cursor:pointer">📷<input type="file" accept="image/*" capture="environment" class="hid" data-p="${p.id}"></label> <button class="btn g" data-e="${p.id}">تعديل</button> <button class="btn d" data-x="${p.id}">حذف</button></td></tr>`).join('')||'<tr><td>لا توجد أصناف</td></tr>';
+  $('pt').querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const p=prods.find(x=>x.id===b.dataset.e);edit=p.id;oldImg=p.image_url;fn.value=p.name;fillCats(p.category||'');fp.value=p.price;fs.value=p.stock;fu.value=p.unit||'piece';fi.value='';
     if(p.image_url){prev.src=p.image_url;prev.classList.remove('hid')}$('ft').textContent='تعديل صنف';$('cancel').classList.remove('hid');scrollTo(0,0)});
+  $('pt').querySelectorAll('input[data-p]').forEach(i=>i.onchange=async()=>{
+    const f=i.files[0];if(!f)return;const p=prods.find(x=>x.id===i.dataset.p);i.parentElement.firstChild.textContent='⏳';
+    try{const url=await upImg(f,T.id);const {error}=await sb.from('products').update({image_url:url}).eq('id',p.id);if(error)throw error;p.image_url=url;renderProds()}
+    catch(e){alert('تعذر رفع الصورة: '+e.message);renderProds()}});
   $('pt').querySelectorAll('[data-x]').forEach(b=>b.onclick=async()=>{if(confirm('حذف الصنف؟')){const {error}=await sb.from('products').delete().eq('id',b.dataset.x);if(error)alert(error.message);loadProds()}});
 }
 fi.onchange=()=>{if(fi.files[0]){prev.src=URL.createObjectURL(fi.files[0]);prev.classList.remove('hid')}};
@@ -104,7 +112,31 @@ function renderOrders(){
   $('ords').innerHTML=ordersData.filter(o=>!qv||norm(o.customer_name).includes(qv)||String(o.customer_phone).includes(qv.replace(/\s/g,''))||o.id.startsWith(qv)).map(o=>`<div class="card"><div class="row"><b>${E(o.customer_name)} — ${E(o.customer_phone)}</b><span class="tag" style="flex:none">${E(o.status)}</span></div><small>${new Date(o.created_at).toLocaleString('ar-EG')} — ${E(o.customer_address)}</small><div>${o.order_items.map(i=>E(i.name)+' ×'+qtyText(i.quantity,i.unit)).join('، ')}</div>${o.note?'<small>ملاحظة: '+E(o.note)+'</small>':''}<div><b>${money(o.total_price)}</b></div><div class="row" style="margin-top:8px">${ST.map(s=>`<button class="btn g" data-o="${o.id}" data-s="${s}">${s}</button>`).join('')}</div></div>`).join('')||'<div class="msg">لا توجد طلبات.</div>';
   $('ords').querySelectorAll('[data-o]').forEach(b=>b.onclick=async()=>{await sb.from('orders').update({status:b.dataset.s}).eq('id',b.dataset.o);loadOrders();loadStats()});
 }
-$('ref').onclick=()=>{loadOrders();loadStats()};$('ps').oninput=renderProds;$('os').oninput=renderOrders;
+$('ref').onclick=()=>{loadOrders();loadStats()};let live=false,pto,ot2,newN=0;
+function ding(){try{const a=new (window.AudioContext||window.webkitAudioContext)(),o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.frequency.value=880;g.gain.value=.2;o.start();setTimeout(()=>{o.frequency.value=660},170);setTimeout(()=>{o.stop();a.close()},400)}catch(e){}}
+function otoast(t){$('ot').textContent=t;$('ot').classList.remove('hid');clearTimeout(ot2);ot2=setTimeout(()=>$('ot').classList.add('hid'),8000)}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){newN=0;document.title='🏪 '+(T?T.name:'لوحة المحل')}});
+function startLive(){
+  if(live)return;live=true;const f='tenant_id=eq.'+T.id,all=()=>{loadOrders();loadStats();loadProds()};
+  sb.channel('own-'+T.id)
+   .on('postgres_changes',{event:'INSERT',schema:'public',table:'orders',filter:f},()=>{ding();otoast('🔔 طلب جديد وصل!');if(document.hidden){newN++;document.title='('+newN+') 🔔 طلب جديد'}all()})
+   .on('postgres_changes',{event:'UPDATE',schema:'public',table:'orders',filter:f},()=>{loadOrders();loadStats()})
+   .on('postgres_changes',{event:'*',schema:'public',table:'products',filter:f},()=>{clearTimeout(pto);pto=setTimeout(loadProds,500)})
+   .subscribe();
+  setInterval(()=>{if(!document.hidden&&T)all()},30000);
+}
+let extraCats=[];
+function fillCats(cur){
+  const set=new Set([...prods.map(p=>p.category).filter(Boolean),...extraCats]);if(cur)set.add(cur);
+  $('fc').innerHTML='<option value="">— اختار القسم —</option>'+[...set].sort((a,b)=>a.localeCompare(b,'ar')).map(c=>`<option value="${E(c)}">${E(c)}</option>`).join('');
+  $('fc').value=cur||'';
+}
+$('addcat').onclick=()=>{
+  const n=(prompt('اسم القسم الجديد')||'').trim();if(!n)return;
+  const ex=[...$('fc').options].find(o=>o.value&&norm(o.value)===norm(n));if(ex){$('fc').value=ex.value;return}
+  extraCats.push(n);try{localStorage.setItem('cats_'+T.id,JSON.stringify(extraCats))}catch(e){}fillCats(n);
+};
+$('ps').oninput=renderProds;$('pn').onchange=renderProds;$('os').oninput=renderOrders;
 async function xlsxImages(buf,sheetName){
   const Z=await JSZip.loadAsync(buf),P=new DOMParser(),res={m:{},rich:Z.file(/xl\/richData\//).length>0};
   const rd=async p=>{const f=Z.file(p);return f?P.parseFromString(await f.async('string'),'application/xml'):null};
@@ -187,7 +219,7 @@ $('cp').onclick=async()=>{
     const {data:{user}}=await sb.auth.getUser();
     const v=await sb.auth.signInWithPassword({email:user.email,password:o});
     if(v.error)throw new Error('الباسورد الحالي غلط');
-    const {error}=await sb.auth.updateUser({password:n});if(error)throw error;
+    const {error}=await sb.auth.updateUser({password:n});if(error)throw error;try{await sb.auth.signOut({scope:'others'})}catch(e){}
     ['op','np','np2'].forEach(i=>$(i).value='');pmsg('تم تغيير الباسورد ✅');
   }catch(e){pmsg('الخطأ: '+e.message)}
   $('cp').disabled=false;
